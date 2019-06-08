@@ -7,12 +7,13 @@ Original file is located at
     https://colab.research.google.com/drive/19nS8HsZeAp6Yr9GHGdRSsiZfvRMGIixM
 """
 
-import sys
+import sys,time
 sys.path.insert(0, '../src')
 from robot import Robot
 import numpy as np
 import skfuzzy as fuzz
 from skfuzzy import control as ctrl
+import matplotlib.pyplot as plt
 
 braitenbergL=[-0.2,-0.4,-0.6,-0.8,-1.0,-1.2,-1.4,-1.6]
 braitenbergR=[-1.6,-1.4,-1.2,-1.0,-0.8,-0.6,-0.4,-0.2]
@@ -40,41 +41,65 @@ def braitenberg(dist, vel):
 
     return [vLeft, vRight]
 
-def wallFollow(dist, vel):
-    vLeft = vRight = vel
-    noDetect_min = 0.5
-    noDetect_max = 1.0
-    print(dist)
-    for i in range(4):
-        if(noDetect_min < dist[i] < noDetect_max):
-            detect[i] = 1
-        else:
-            detect[i]=0
-        for i in range(4):
-            vLeft = vLeft + detect[i]*0.8
-            vRight = vRight  - detect[i]*0.2
-    for i in range(4, len(dist)):
-        if(dist[i] < noDetect_min):
-            detect[i] = 1
-        else:
-            detect[i]=0
-        for i in range(4, 8):
-            vLeft = vLeft + detect[i]*0.4
-            vRight = vRight  - detect[i]*0.2
+def wall_follow(dist):
+    distance_left = min(dist[:4])
+    distance_right = min(dist[4:])
 
-    return [vLeft, vRight]
+    walking.input['distance left'] = distance_left
+    walking.input['distance right'] = distance_right
+    walking.compute()
 
-def fuzzy(dist, vel):
-  distance = crtl.Antecedent(np.arange(), 'distance')
-  velocity = ctrl.Consequence(vel, 'velocity')
-  distance['low'] = fuzz.trimf(dist, [0, 0, 0.3])
-  distance['medium'] = fuzz.trimf(dist, [0, 0.3, 0.5])
-  distance['high'] = fuzz.trimf(dist, [0.3, 0.5, 0.5]) 
-  
+    return [walking.output['velocity left'], walking.output['velocity right']]
+
+distance_left = ctrl.Antecedent(np.arange(0.0,1.1,0.1), 'distance left')
+distance_right = ctrl.Antecedent(np.arange(0.0,1.1,0.1), 'distance right')
+
+velocity_left = ctrl.Consequent(np.arange(0.0,3.1,0.1), 'velocity left')
+velocity_right = ctrl.Consequent(np.arange(0.0,3.1,0.1), 'velocity right')
+
+distance_left['low'] = fuzz.trimf(distance_left.universe, [0, 0, 0.5])
+distance_left['medium'] = fuzz.trimf(distance_left.universe, [0, 0.5, 1.0])
+distance_left['high'] = fuzz.trimf(distance_left.universe, [0.5, 1.0, 1.0 ])
+
+distance_right['low'] = fuzz.trimf(distance_right.universe, [0, 0, 0.5])
+distance_right['medium'] = fuzz.trimf(distance_right.universe, [0, 0.5, 1.0])
+distance_right['high'] = fuzz.trimf(distance_right.universe, [0.5, 1.0, 1.0 ])
+
+velocity_left['low'] = fuzz.trimf(velocity_left.universe, [0, 0, 1.5])
+velocity_left['medium'] = fuzz.trimf(velocity_left.universe, [0, 1.5, 3.0])
+velocity_left['high'] = fuzz.trimf(velocity_left.universe, [1.5, 3.0, 3.0])
+
+velocity_right['low'] = fuzz.trimf(velocity_right.universe, [0, 0, 1.5])
+velocity_right['medium'] = fuzz.trimf(velocity_right.universe, [0, 1.5, 3.0])
+velocity_right['high'] = fuzz.trimf(velocity_right.universe, [1.5, 3.0, 3.0])
+
+rule0 = ctrl.Rule(distance_left['high'] & distance_right['high'], consequent=(velocity_left['high'],velocity_right['high']))
+rule1 = ctrl.Rule(distance_left['medium'], consequent = (velocity_right['medium'],velocity_left['low']))
+rule2 = ctrl.Rule(distance_right['medium'], consequent= (velocity_right['low'], velocity_left['medium']))
+rule3 = ctrl.Rule(distance_left['low'], consequent=(velocity_right['low'] , velocity_left['high']))
+rule4 = ctrl.Rule(distance_right['low'], consequent = (velocity_right['high'] , velocity_left['low']))
+
+velocity_control = ctrl.ControlSystem(rules=[rule0,rule1,rule2,rule3,rule4])
+
+walking = ctrl.ControlSystemSimulation(velocity_control)
+
+""" walking.input['distance left'] = 0.01
+walking.input['distance right'] = 1.0
+walking.compute()
+print(walking.output['velocity left'],walking.output['velocity right'])
+velocity_left.view(sim = walking)
+plt.show() """
+
 robot = Robot()
+robot.set_left_velocity(6.0)
+robot.set_right_velocity(6.0)
+i = 0
 while(robot.get_connection_status() != -1):
     us_distances = robot.read_ultrassonic_sensors()
-    #vel = braitenberg(us_distances[:8], 3) #Using only the 8 frontal sensors
-    vel = wallFollow(us_distances[:8], 3)
+    if i > 500:
+        print(us_distances[:8])
+        i = 0
+    i+=1
+    vel = wall_follow(us_distances[:8])
     robot.set_left_velocity(vel[0])
     robot.set_right_velocity(vel[1])
