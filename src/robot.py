@@ -122,13 +122,11 @@ class Robot():
 		for sensor in self.us_handle:
 			res, status, distance,_,_ = vrep.simxReadProximitySensor(self.clientID, sensor, vrep.simx_opmode_streaming)
 			while(res != vrep.simx_return_ok):
-				res, status, distance,_,_ = vrep.simxReadProximitySensor(self.clientID, sensor, vrep.simx_opmode_buffer)
-
+				res, status, distance,value,_ = vrep.simxReadProximitySensor(self.clientID, sensor, vrep.simx_opmode_buffer)
 			if(status != 0):
 				distances.append(distance[2])
 			else:
 				distances.append(noDetectionDist)
-
 
 		return distances
 
