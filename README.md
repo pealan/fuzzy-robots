@@ -8,4 +8,4 @@ After this, you can load the scene p3dx.ttt in V-REP. This scene contains a [Pio
 
 Always remember to Start the simulation **before** running your code.
 
-
+The code to be executed is "trab.py".
